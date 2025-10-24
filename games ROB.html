@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="hy">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Shirak Defender — Online Survival Shooter</title>
+  <meta name="description" content="Shirak Defender — փոքր, բեշտ, responsive HTML5 Top-down shooter. Կառավարիր հերոսին, հավաքիր power-ups և պահիր բարձրագույն շեմը։" />
+  <meta name="keywords" content="HTML5 game, canvas game, shooter, survival, Shirak, Armenian game" />
+  <meta name="author" content="Robert Gareginyan" />
+  <!-- OpenGraph -->
+  <meta property="og:title" content="Shirak Defender — Survival Shooter" />
+  <meta property="og:description" content="Responsive HTML5 top-down shooter made with Canvas. Play now!" />
+  <meta property="og:type" content="game" />
+  <style>
+    /* Basic reset and layout */
+    :root{
+      --bg:#0b1020;
+      --panel:#0f1724;
+      --accent:#ffd166;
+      --muted:#91a6c2;
+      --danger:#ff6b6b;
+      --glass: rgba(255,255,255,0.04);
+      --radius:14px;
+      --ui-pad:12px;
+    }
+    html,body{height:100%;margin:0;font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+    body{background:linear-gradient(180deg,#071021 0%, #06101b 100%); color:#e6eef8; display:flex; align-items:center; justify-content:center; padding:20px; box-sizing:border-box;}
+    .container{width:100%; max-width:1100px; display:grid; grid-template-columns: 1fr 320px; gap:18px; align-items:start;}
+    @media (max-width:980px){ .container{grid-template-columns: 1fr; max-width:900px;} }
+    .panel{
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:var(--radius);
+      padding:16px;
+      box-shadow: 0 6px 20px rgba(2,6,23,0.6);
+      border: 1px solid rgba(255,255,255,0.03);
+    }
+    /* Game viewport */
+    #gameWrap{position:relative; aspect-ratio: 16/9; border-radius:12px; overflow:hidden; background: radial-gradient(circle at 20% 10%, rgba(255,255,255,0.02), transparent 5%), var(--bg); display:flex; align-items:center; justify-content:center;}
+    canvas{width:100%; height:100%; display:block; image-rendering: optimizeSpeed;}
+    /* Right column UI */
+    .ui{display:flex; flex-direction:column; gap:12px;}
+    .score{display:flex; align-items:center; justify-content:space-between; gap:8px; font-weight:600;}
+    .small{font-size:13px;color:var(--muted);}
+    .btn{
+      background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      border:1px solid rgba(255,255,255,0.05);
+      padding:10px 12px; border-radius:10px; cursor:pointer;
+      user-select:none; font-weight:600;
+    }
+    .controls{display:flex; gap:8px; flex-wrap:wrap;}
+    .muted{color:var(--muted); font-size:13px;}
+    .footer-note{font-size:12px;color:rgba(255,255,255,0.45); margin-top:6px;}
+    /* Mobile overlay controls */
+    .touch-controls{position:absolute; left:12px; bottom:12px; display:flex; gap:8px;}
+    .touch-btn{width:56px; height:56px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:var(--glass); border:1px solid rgba(255,255,255,0.02); font-weight:700; user-select:none;}
+    .top-bar{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;}
+    .title{font-size:18px; font-weight:700;}
+    .label-pill{background:rgba(255,255,255,0.025); padding:6px 8px; border-radius:8px; font-size:13px;}
+    /* small overlay UI in canvas */
+    .overlay{
+      position:absolute; left:12px; top:12px; pointer-events:none; text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+    }
+    .overlay .line{margin-bottom:6px;}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="panel" id="leftPanel">
+      <div class="top-bar">
+        <div>
+          <div class="title">Shirak Defender</div>
+          <div class="small">Top-down survival shooter — WASD/arrows՝ տեղափոխվել, Space՝ կրակ</div>
+        </div>
+        <div class="label-pill small">v1.0</div>
+      </div>
+
+      <div id="gameWrap">
+        <canvas id="game"></canvas>
+
+        <!-- Mobile touch controls -->
+        <div class="touch-controls" id="touchControls" style="display:none;">
+          <div class="touch-btn" id="btnUp">▲</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div class="touch-btn" id="btnLeft">◀</div>
+            <div class="touch-btn" id="btnDown">▼</div>
+            <div class="touch-btn" id="btnRight">▶</div>
+          </div>
+        </div>
+
+        <div class="overlay" aria-hidden="true">
+          <div class="line" id="overlayScore">Score: 0</div>
+          <div class="line small" id="overlayInfo">Level 1 — Enemies spawning...</div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; margin-top:12px; align-items:center;">
+        <button class="btn" id="startBtn">Սկսել</button>
+        <button class="btn" id="pauseBtn">Pause</button>
+        <button class="btn" id="muteBtn">🔊</button>
+        <div style="flex:1"></div>
+        <div class="muted small">Highscore: <span id="highScore">0</span></div>
+      </div>
+
+      <div class="footer-note">Controls: WASD / Arrow keys to move — Space to shoot — P to pause — On mobile use touch buttons.</div>
+    </div>
+
+    <aside class="panel ui">
+      <div>
+        <div class="score"><div>Score</div><div id="uiScore">0</div></div>
+        <div class="small">Lives: <span id="uiLives">3</span> · Level: <span id="uiLevel">1</span></div>
+      </div>
+
+      <div>
+        <h4 style="margin:8px 0 6px 0;">Upgrades & Power-ups</h4>
+        <div class="small">- Rapid Fire (limits) · - Shield · - Health · - Bomb (clears enemies)</div>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button class="btn" id="buyRapid">Buy Rapid (10% score)</button>
+        <button class="btn" id="buyShield">Buy Shield (20% score)</button>
+      </div>
+
+      <div style="margin-top:10px;">
+        <h4 style="margin:6px 0;">How to host</h4>
+        <div class="small">
+          1) Թող `index.html`-ը լինի սերվերի public ռութում.<br>
+          2) Add to GitHub Pages կամ Netlify for free hosting.<br>
+          3) Add meta tags / sitemap.xml to help Google/Yandex index it.
+        </div>
+      </div>
+
+      <div style="margin-top:auto;">
+        <div class="small">Developer: You · Built with HTML5 Canvas</div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+/*
+  Shirak Defender — single-file HTML5 canvas game
+  Author: You
+  Notes: Designed to be copy-pasted and hosted as-is.
+*/
+
+/* ====== Utilities ====== */
+const qs = sel => document.querySelector(sel);
+const rand = (a,b)=> Math.random()*(b-a)+a;
+const clamp = (v,a,b)=> Math.max(a, Math.min(b,v));
+const dist = (a,b)=> {
+  const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy);
+}
+
+/* ====== Canvas Setup ====== */
+const canvas = qs('#game');
+const ctx = canvas.getContext('2d');
+let W = 1280, H = 720;
+function resizeCanvas(){
+  // keep internal canvas resolution high for crispness
+  const rect = canvas.getBoundingClientRect();
+  const scale = window.devicePixelRatio || 1;
+  canvas.width = Math.round(rect.width * scale);
+  canvas.height = Math.round(rect.height * scale);
+  ctx.setTransform(scale,0,0,scale,0,0);
+  W = rect.width; H = rect.height;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+/* ====== Game State ====== */
+let running=false, paused=false, muted=false;
+let lastTime=0;
+let keys = {};
+let touchMode = false;
+
+const state = {
+  score:0, lives:3, level:1, enemies:[], bullets:[], player:null, particles:[], powerups:[], highScore:0,
+  spawnTimer:0, spawnInterval:1500, elapsed:0, rapidActive:false, rapidTimer:0, shield:false, shieldTimer:0
+};
+
+try {
+  const hs = localStorage.getItem('shirak_highscore');
+  if(hs) state.highScore = parseInt(hs,10) || 0;
+  qs('#highScore').innerText = state.highScore;
+} catch(e){}
+
+/* ====== Player ====== */
+class Player {
+  constructor(x,y){
+    this.x=x; this.y=y; this.r=18; this.angle=0;
+    this.speed=260; this.color='#ffd166'; this.cooldown=0;
+    this.lives=3;
+  }
+  update(dt){
+    // Movement
+    let vx=0, vy=0;
+    if(keys['ArrowUp']||keys['w']) vy -= 1;
+    if(keys['ArrowDown']||keys['s']) vy += 1;
+    if(keys['ArrowLeft']||keys['a']) vx -= 1;
+    if(keys['ArrowRight']||keys['d']) vx += 1;
+    if(touchMode){
+      if(touchState.up) vy -= 1;
+      if(touchState.down) vy += 1;
+      if(touchState.left) vx -= 1;
+      if(touchState.right) vx += 1;
+    }
+    const len = Math.hypot(vx,vy) || 1;
+    this.x += (vx/len) * this.speed * dt;
+    this.y += (vy/len) * this.speed * dt;
+    this.x = clamp(this.x, this.r, W - this.r);
+    this.y = clamp(this.y, this.r, H - this.r);
+    // Aim angle toward mouse or forward
+    if(mouse.pos){
+      this.angle = Math.atan2(mouse.pos.y - this.y, mouse.pos.x - this.x);
+    }
+    // Shooting
+    this.cooldown -= dt*1000;
+    if((keys[' '] || keys['Spacebar'] || mouse.down) && this.cooldown <= 0){
+      this.shoot();
+      this.cooldown = state.rapidActive ? 80 : 280;
+    }
+    if(state.rapidActive){
+      state.rapidTimer -= dt*1000;
+      if(state.rapidTimer <= 0) state.rapidActive = false;
+    }
+    if(state.shield){
+      state.shieldTimer -= dt*1000;
+      if(state.shieldTimer <= 0) state.shield = false;
+    }
+  }
+  shoot(){
+    const speed = 620;
+    const vx = Math.cos(this.angle)*speed;
+    const vy = Math.sin(this.angle)*speed;
+    state.bullets.push(new Bullet(this.x + Math.cos(this.angle)*this.r, this.y + Math.sin(this.angle)*this.r, vx, vy));
+    playSound('pew');
+  }
+  draw(){
+    // body
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    // shadow
+    ctx.beginPath(); ctx.ellipse(0,12,20,8,0,0,Math.PI*2); ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fill();
+    // triangle ship
+    ctx.beginPath();
+    ctx.moveTo(20,0); ctx.lineTo(-12,10); ctx.lineTo(-12,-10); ctx.closePath();
+    ctx.fillStyle = this.color; ctx.fill();
+    // shield ring
+    if(state.shield){
+      ctx.beginPath(); ctx.arc(0,0,this.r+8,0,Math.PI*2); ctx.strokeStyle='rgba(130,200,255,0.6)'; ctx.lineWidth=3; ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/* ====== Bullet ====== */
+class Bullet{
+  constructor(x,y,vx,vy){ this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.r=4; this.ttl=2; }
+  update(dt){
+    this.x += this.vx*dt; this.y += this.vy*dt; this.ttl -= dt;
+  }
+  draw(){
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+  }
+}
+
+/* ====== Enemy ====== */
+class Enemy{
+  constructor(x,y,type=1){
+    this.x=x; this.y=y; this.type=type;
+    this.r = type===1 ? 16 : (type===2 ? 26 : 36);
+    this.speed = type===1 ? rand(40,90) : (type===2 ? rand(20,60) : rand(10,40));
+    this.color = type===1 ? '#ff6b6b' : (type===2 ? '#ff9f1c' : '#f94144');
+    this.hp = type===1 ? 1 : (type===2 ? 3 : 6);
+    this.score = type===1 ? 10 : (type===2 ? 40 : 120);
+    this.angle = 0;
+  }
+  update(dt){
+    // Move toward player
+    const p = state.player;
+    this.angle = Math.atan2(p.y - this.y, p.x - this.x);
+    this.x += Math.cos(this.angle) * this.speed * dt;
+    this.y += Math.sin(this.angle) * this.speed * dt;
+  }
+  draw(){
+    ctx.save();
+    ctx.translate(this.x,this.y);
+    ctx.beginPath();
+    // simple gem-shaped enemy
+    ctx.moveTo(0,-this.r); ctx.lineTo(this.r,0); ctx.lineTo(0,this.r); ctx.lineTo(-this.r,0); ctx.closePath();
+    ctx.fillStyle = this.color; ctx.fill();
+    // hp bar
+    ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(-this.r, -this.r-8, this.r*2,4);
+    const w = (this.hp / (this.type===1?1:(this.type===2?3:6))) * (this.r*2);
+    ctx.fillStyle = '#6ee7b7'; ctx.fillRect(-this.r, -this.r-8, w,4);
+    ctx.restore();
+  }
+}
+
+/* ====== PowerUp ====== */
+class PowerUp{
+  constructor(x,y,kind){
+    this.x=x; this.y=y; this.r=12; this.kind=kind;
+    this.ttl=12;
+  }
+  update(dt){ this.ttl -= dt; }
+  draw(){
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+    if(this.kind==='health') ctx.fillStyle='#6ee7b7';
+    else if(this.kind==='rapid') ctx.fillStyle='#ffd166';
+    else if(this.kind==='shield') ctx.fillStyle='#74c0fc';
+    else ctx.fillStyle='#f78fb3';
+    ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,0.12)'; ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(this.kind[0].toUpperCase(), this.x, this.y);
+  }
+}
+
+/* ====== Particles (for effects) ====== */
+class Particle{
+  constructor(x,y,vx,vy,ttl,color,size=3){
+    this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.ttl=ttl; this.color=color; this.size=size;
+  }
+  update(dt){ this.ttl -= dt; this.x += this.vx*dt; this.y += this.vy*dt; this.vy += 200*dt; }
+  draw(){ ctx.globalAlpha = Math.max(0, this.ttl/1.2); ctx.fillStyle=this.color; ctx.beginPath(); ctx.arc(this.x,this.y,this.size,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; }
+}
+
+/* ====== Input ====== */
+let mouse = {pos:null, down:false};
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mouse.pos = {x: (e.clientX - rect.left), y: (e.clientY - rect.top)};
+});
+canvas.addEventListener('mousedown', e => mouse.down = true);
+canvas.addEventListener('mouseup', e => mouse.down = false);
+window.addEventListener('keydown', e => { keys[e.key] = true; if(e.key==='p' || e.key==='P') togglePause(); });
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+/* Touch controls */
+let touchState = {up:false,down:false,left:false,right:false};
+['btnUp','btnDown','btnLeft','btnRight'].forEach(id=>{
+  const el = qs('#'+id);
+  el && (function(el,dir){
+    el.addEventListener('touchstart', e => { e.preventDefault(); touchMode = true; touchState[dir]=true; });
+    el.addEventListener('touchend', e => { e.preventDefault(); touchState[dir]=false; });
+    el.addEventListener('mousedown', e => { touchMode=true; touchState[dir]=true; });
+    el.addEventListener('mouseup', e => { touchState[dir]=false; });
+  })(el, id==='btnUp'?'up':id==='btnDown'?'down':id==='btnLeft'?'left':'right');
+});
+
+/* ====== Game logic ====== */
+function startGame(){
+  state.score = 0; state.lives = 3; state.level = 1; state.enemies = []; state.bullets = []; state.particles = []; state.powerups = [];
+  state.spawnTimer = 0; state.spawnInterval = 1500; state.elapsed = 0;
+  state.rapidActive=false; state.shield=false;
+  state.player = new Player(W/2, H/2);
+  running = true; paused=false; lastTime = performance.now();
+  qs('#overlayInfo').innerText = 'Level 1 — Survive!';
+  qs('#uiLives').innerText = state.lives;
+  qs('#uiLevel').innerText = state.level;
+  qs('#uiScore').innerText = state.score;
+  tick();
+}
+
+function spawnEnemy(){
+  // spawn at random edge
+  const edge = Math.floor(rand(0,4));
+  let x,y;
+  if(edge===0){ x = -40; y = rand(-20,H+20); }
+  else if(edge===1){ x = W+40; y = rand(-20,H+20); }
+  else if(edge===2){ x = rand(-20,W+20); y = -40; }
+  else { x = rand(-20,W+20); y = H+40; }
+  // enemy type depends on level
+  const r = Math.random();
+  let type = 1;
+  const lvl = state.level;
+  const heavyChance = clamp(0.05 + lvl*0.02, 0, 0.35);
+  const medChance = clamp(0.2 + lvl*0.03, 0, 0.5);
+  if(r < heavyChance) type = 3;
+  else if(r < medChance+heavyChance) type = 2;
+  state.enemies.push(new Enemy(x,y,type));
+}
+
+function spawnPowerUp(x,y){
+  const kinds = ['health','rapid','shield','bomb'];
+  const kind = kinds[Math.floor(rand(0,kinds.length))];
+  state.powerups.push(new PowerUp(x,y,kind));
+}
+
+function playSound(name){
+  if(muted) return;
+  // Simple WebAudio beep (no external assets)
+  try {
+    const ctxA = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctxA.createOscillator();
+    const g = ctxA.createGain();
+    o.connect(g); g.connect(ctxA.destination);
+    if(name==='pew'){ o.type='sine'; o.frequency.value = 900; g.gain.value=0.02; o.start(); setTimeout(()=>{ o.stop(); ctxA.close(); },80); }
+    else if(name==='hit'){ o.type='triangle'; o.frequency.value=200; g.gain.value=0.03; o.start(); setTimeout(()=>{ o.stop(); ctxA.close(); },120); }
+    else { o.type='sine'; o.frequency.value=400; g.gain.value=0.02; o.start(); setTimeout(()=>{ o.stop(); ctxA.close(); },60); }
+  } catch(e){}
+}
+
+/* ====== Collision helpers ====== */
+function collide(a,b){
+  return Math.hypot(a.x-b.x, a.y-b.y) < (a.r + b.r);
+}
+
+/* ====== Tick / Render loop ====== */
+function tick(now){
+  if(!running) return;
+  if(paused){ lastTime = now || performance.now(); requestAnimationFrame(tick); return; }
+  now = now || performance.now();
+  let dt = (now - lastTime) / 1000;
+  if(dt > 0.05) dt = 0.05;
+  lastTime = now;
+  update(dt);
+  render();
+  requestAnimationFrame(tick);
+}
+
+/* ====== Update ====== */
+function update(dt){
+  state.elapsed += dt*1000;
+  // spawn logic increases difficulty over time
+  state.spawnTimer += dt*1000;
+  const interval = clamp(1200 - (state.level-1)*80, 450, 2500);
+  if(state.spawnTimer >= interval){
+    spawnEnemy();
+    state.spawnTimer = 0;
+  }
+  // Level progression
+  if(state.elapsed > state.level * 20000){
+    state.level++; qs('#uiLevel').innerText = state.level;
+    qs('#overlayInfo').innerText = `Level ${state.level} — Increased intensity!`;
+  }
+
+  // Update entities
+  state.player && state.player.update(dt);
+  for(let b of state.bullets) b.update(dt);
+  for(let e of state.enemies) e.update(dt);
+  for(let p of state.particles) p.update(dt);
+  for(let pu of state.powerups) pu.update(dt);
+
+  // Collisions: bullets vs enemies
+  for(let i = state.bullets.length-1; i>=0; i--){
+    const b = state.bullets[i];
+    if(b.ttl <= 0 || b.x < -50 || b.x > W+50 || b.y < -50 || b.y > H+50){ state.bullets.splice(i,1); continue; }
+    for(let j = state.enemies.length-1; j>=0; j--){
+      const e = state.enemies[j];
+      if(collide(b,e)){
+        e.hp -= 1;
+        state.bullets.splice(i,1);
+        // hit particle
+        for(let k=0;k<6;k++) state.particles.push(new Particle(b.x,b.y, rand(-80,80), rand(-120,-20), 0.7, '#ffb4a2', 2));
+        playSound('hit');
+        if(e.hp <= 0){
+          // destroy enemy
+          state.score += e.score;
+          qs('#uiScore').innerText = state.score;
+          spawnPowerUp(e.x, e.y);
+          for(let k=0;k<12;k++) state.particles.push(new Particle(e.x,e.y, rand(-200,200), rand(-200,200), 1.2, '#ff6b6b', 3));
+          state.enemies.splice(j,1);
+        }
+        break;
+      }
+    }
+  }
+
+  // Enemies vs player
+  for(let i = state.enemies.length-1; i>=0; i--){
+    const e = state.enemies[i];
+    if(collide(e, state.player)){
+      // take damage or bounce
+      if(state.shield){
+        // destroy enemy
+        for(let k=0;k<8;k++) state.particles.push(new Particle(e.x,e.y, rand(-120,120), rand(-120,120), 0.8, '#74c0fc', 2));
+        state.enemies.splice(i,1);
+        playSound('hit');
+      } else {
+        state.lives -= 1;
+        qs('#uiLives').innerText = state.lives;
+        playSound('hit');
+        // knockback player
+        state.player.x -= Math.cos(e.angle)*40;
+        state.player.y -= Math.sin(e.angle)*40;
+        // small invulnerability effect by turning shield for a short time
+        state.shield = true; state.shieldTimer = 900;
+        if(state.lives <= 0){
+          gameOver();
+          return;
+        }
+      }
+    }
+  }
+
+  // Power-ups pickup
+  for(let i=state.powerups.length-1;i>=0;i--){
+    const pu = state.powerups[i];
+    if(collide(pu, state.player)){
+      if(pu.kind==='health'){ state.lives = Math.min(5, state.lives+1); qs('#uiLives').innerText = state.lives; }
+      else if(pu.kind==='rapid'){ state.rapidActive = true; state.rapidTimer = 7000; }
+      else if(pu.kind==='shield'){ state.shield = true; state.shieldTimer = 6000; }
+      else if(pu.kind==='bomb'){
+        // clear enemies
+        state.enemies = [];
+        for(let k=0;k<24;k++) state.particles.push(new Particle(state.player.x, state.player.y, rand(-400,400), rand(-400,400), 1.6, '#ffd166', 4));
+      }
+      playSound('pew');
+      state.powerups.splice(i,1);
+    } else if(pu.ttl <= 0){
+      state.powerups.splice(i,1);
+    }
+  }
+
+  // Particles cleanup
+  for(let i=state.particles.length-1;i>=0;i--) if(state.particles[i].ttl <= 0) state.particles.splice(i,1);
+
+  // update overlay
+  qs('#overlayScore').innerText = `Score: ${state.score}`;
+  qs('#uiScore').innerText = state.score;
+
+  // difficulty growth subtley reduces interval
+}
+
+/* ====== Render ====== */
+function render(){
+  // background
+  ctx.clearRect(0,0,W,H);
+  // subtle grid
+  drawGrid();
+
+  // draw powerups
+  for(let pu of state.powerups) pu.draw();
+
+  // bullets
+  for(let b of state.bullets) b.draw();
+
+  // enemies
+  for(let e of state.enemies) e.draw();
+
+  // player
+  state.player && state.player.draw();
+
+  // particles
+  for(let p of state.particles) p.draw();
+
+  // HUD (top-right)
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(W-210, 14, 196, 72);
+  ctx.fillStyle = '#fff'; ctx.font = '13px sans-serif'; ctx.textAlign='left';
+  ctx.fillText(`Score: ${state.score}`, W-196, 36);
+  ctx.fillText(`Level: ${state.level}`, W-196, 56);
+  ctx.restore();
+
+  // If paused, overlay
+  if(paused){
+    ctx.save();
+    ctx.fillStyle='rgba(4,8,14,0.6)';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#fff'; ctx.font='36px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('PAUSED', W/2, H/2);
+    ctx.restore();
+  }
+}
+
+function drawGrid(){
+  ctx.save();
+  ctx.globalAlpha = 0.05;
+  ctx.strokeStyle = '#9fb6d8';
+  const step = 40;
+  for(let x=0;x<W;x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0;y<H;y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  ctx.restore();
+}
+
+/* ====== Game Over ====== */
+function gameOver(){
+  running = false;
+  // show overlay, save highscore
+  if(state.score > state.highScore){
+    state.highScore = state.score;
+    try { localStorage.setItem('shirak_highscore', state.highScore); } catch(e){}
+    qs('#highScore').innerText = state.highScore;
+  }
+  qs('#overlayInfo').innerText = 'Game Over — Press Start to try again';
+  // draw big Game Over
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.6)';
+  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#fff'; ctx.font='40px sans-serif'; ctx.textAlign='center';
+  ctx.fillText('GAME OVER', W/2, H/2 - 10);
+  ctx.font='20px sans-serif'; ctx.fillText(`Score: ${state.score}  ·  Highscore: ${state.highScore}`, W/2, H/2 + 26);
+  ctx.restore();
+}
+
+/* ====== UI bindings ====== */
+qs('#startBtn').addEventListener('click', ()=> startGame());
+qs('#pauseBtn').addEventListener('click', ()=> togglePause());
+qs('#muteBtn').addEventListener('click', ()=>{
+  muted = !muted;
+  qs('#muteBtn').innerText = muted ? '🔇' : '🔊';
+});
+qs('#buyRapid').addEventListener('click', ()=>{
+  // cheap demo: spend score to activate
+  const cost = Math.max(50, Math.floor(state.score*0.1));
+  if(state.score >= cost){
+    state.score -= cost; state.rapidActive = true; state.rapidTimer = 9000;
+    qs('#uiScore').innerText = state.score;
+  } else alert('Not enough score.');
+});
+qs('#buyShield').addEventListener('click', ()=>{
+  const cost = Math.max(80, Math.floor(state.score*0.2));
+  if(state.score >= cost){
+    state.score -= cost; state.shield = true; state.shieldTimer = 12000;
+    qs('#uiScore').innerText = state.score;
+  } else alert('Not enough score.');
+});
+
+/* pause */
+function togglePause(){
+  if(!running) return;
+  paused = !paused;
+  qs('#pauseBtn').innerText = paused ? 'Resume' : 'Pause';
+}
+
+/* detect mobile and show touch controls */
+function detectMobile(){
+  const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  if(isTouch){
+    touchMode = true;
+    const el = qs('#touchControls');
+    if(el) el.style.display = 'flex';
+  }
+}
+detectMobile();
+
+/* show highscore initially */
+qs('#highScore').innerText = state.highScore;
+
+/* start automatically small demo after load? we wait for user action to avoid autoplay audio issues */
+</script>
+</body>
+</html>
